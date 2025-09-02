@@ -8,8 +8,8 @@ import pandas as pd
 # -------------------------
 @st.cache_resource
 def load_model():
-    model = joblib.load("models/sentiment_model.pkl")
-    vectorizer = joblib.load("models/vectorizer.pkl")
+    model = joblib.load("sentiment_model.pkl")
+    vectorizer = joblib.load("vectorizer.pkl")
     return model, vectorizer
 
 model, vectorizer = load_model()
@@ -115,3 +115,4 @@ elif page == "Admin Dashboard":
                 st.write(f"- {c}")
         else:
             st.write("✅ No negative comments detected yet.")
+
