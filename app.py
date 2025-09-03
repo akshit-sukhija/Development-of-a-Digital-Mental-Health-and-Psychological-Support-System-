@@ -384,5 +384,3 @@ elif page == "Admin Dashboard":
 
 # Footer
 st.markdown("---")
-st.caption("Presentation-ready: simple UI, clear controls. To use ML prediction add `models/sentiment_model.pkl` and `models/vectorizer.pkl` (joblib) into the project.")
-
