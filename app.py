@@ -64,8 +64,8 @@ def rule_sentiment(text: str) -> Tuple[str, float]:
 def load_ml_model() -> Tuple[Optional[Any], Optional[Any]]:
     """Try to load model and vectorizer; return (model, vectorizer) or (None, None)."""
     try:
-        model = joblib.load("models/sentiment_model.pkl")
-        vectorizer = joblib.load("models/vectorizer.pkl")
+        model = joblib.load("sentiment_model.pkl")
+        vectorizer = joblib.load("vectorizer.pkl")
         return model, vectorizer
     except Exception:
         return None, None
@@ -349,3 +349,4 @@ elif page == "Admin Dashboard":
 # -------------------------
 st.markdown("---")
 st.caption("Clean & simple UI — ready for SIH demo. ML model optional: drop 'sentiment_model.pkl' and 'vectorizer.pkl' into a 'models/' folder.")
+
