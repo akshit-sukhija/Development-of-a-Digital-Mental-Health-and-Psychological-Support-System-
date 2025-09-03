@@ -73,8 +73,8 @@ def load_ml_model() -> Tuple[Optional[Any], Optional[Any]]:
     Returns (model, vectorizer) or (None, None) if not present or fails.
     """
     try:
-        model = joblib.load("models/sentiment_model.pkl")
-        vectorizer = joblib.load("models/vectorizer.pkl")
+        model = joblib.load("sentiment_model.pkl")
+        vectorizer = joblib.load("vectorizer.pkl")
         return model, vectorizer
     except Exception:
         return None, None
@@ -385,3 +385,4 @@ elif page == "Admin Dashboard":
 # Footer
 st.markdown("---")
 st.caption("Presentation-ready: simple UI, clear controls. To use ML prediction add `models/sentiment_model.pkl` and `models/vectorizer.pkl` (joblib) into the project.")
+
