@@ -1,30 +1,49 @@
+# app.py
 import streamlit as st
 import joblib
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 import re
+from typing import Tuple, Optional, Dict, Any
 
 # -------------------------
-# Rule-based analyzer
+# Rule-based analyzer (fallback)
 # -------------------------
-POS_WORDS = {"good","great","happy","joy","love","awesome","fantastic","relieved","satisfied","hopeful","calm","better","improved","positive","grateful"}
-NEG_WORDS = {"sad","depressed","angry","upset","anxious","worried","hopeless","terrible","awful","stress","stressed","pain","hurt","bad","negative","lonely","suicidal","angst","panic"}
-NEGATIONS = {"not","no","never","n't","hardly","rarely"}
-INTENSIFIERS = {"very","extremely","really","so","too","super"}
+POS_WORDS = {
+    "good", "great", "happy", "joy", "love", "awesome", "fantastic", "relieved",
+    "satisfied", "hopeful", "calm", "better", "improved", "positive", "grateful",
+    "amazing", "pleased", "excited"
+}
+NEG_WORDS = {
+    "sad", "depressed", "angry", "upset", "anxious", "worried", "hopeless",
+    "terrible", "awful", "stress", "stressed", "pain", "hurt", "bad", "negative",
+    "lonely", "suicidal", "panic", "hate", "annoyed", "frustrated"
+}
+NEGATIONS = {"not", "no", "never", "n't", "hardly", "rarely"}
+INTENSIFIERS = {"very", "extremely", "really", "so", "too", "super"}
 
-def tokenize(text: str):
-    text = text.lower()
+
+def tokenize(text: str) -> list:
+    text = str(text).lower()
     text = re.sub(r"[^a-z0-9'\s]", " ", text)
     return text.split()
 
-def rule_sentiment(text: str):
+
+def rule_sentiment(text: str) -> Tuple[str, float]:
+    """
+    Simple lexicon-based sentiment: returns (label, confidence)
+    """
     tokens = tokenize(text)
-    score, i = 0.0, 0
+    score = 0.0
+    i = 0
     while i < len(tokens):
-        t, weight = tokens[i], 1.0
+        t = tokens[i]
+        weight = 1.0
         if t in INTENSIFIERS and i + 1 < len(tokens):
-            weight, i, t = 1.8, i + 1, tokens[i + 1]
+            weight = 1.8
+            i += 1
+            t = tokens[i]
         neg_window = tokens[max(0, i - 3):i]
         is_negated = any(w in NEGATIONS for w in neg_window)
         if t in POS_WORDS:
@@ -32,280 +51,337 @@ def rule_sentiment(text: str):
         elif t in NEG_WORDS:
             score += weight * (1.0 if is_negated else -1.0)
         i += 1
-    normalized = score / max(1.0, len(tokens))
-    if normalized > 0.05: label = "positive"
-    elif normalized < -0.05: label = "negative"
-    else: label = "neutral"
-    return label, round(min(1.0, abs(normalized) * 5.0), 2)
+    denom = max(1.0, len(tokens))
+    normalized = score / denom
+    if normalized > 0.05:
+        label = "positive"
+    elif normalized < -0.05:
+        label = "negative"
+    else:
+        label = "neutral"
+    confidence = float(min(1.0, abs(normalized) * 5.0))
+    return label, round(confidence, 2)
+
 
 # -------------------------
 # ML model loader
 # -------------------------
 @st.cache_resource
-def load_model():
+def load_ml_model() -> Tuple[Optional[Any], Optional[Any]]:
+    """
+    Attempts to load model and vectorizer from models/*.pkl
+    Returns (model, vectorizer) or (None, None) if not present or fails.
+    """
     try:
-        model = joblib.load("sentiment_model.pkl")
-        vectorizer = joblib.load("vectorizer.pkl")
+        model = joblib.load("models/sentiment_model.pkl")
+        vectorizer = joblib.load("models/vectorizer.pkl")
         return model, vectorizer
     except Exception:
         return None, None
 
-ml_model, ml_vectorizer = load_model()
+
+ml_model, ml_vectorizer = load_ml_model()
+
 
 # -------------------------
-# Robust ML prediction helpers
+# Helpers to robustly map ML outputs to canonical labels
 # -------------------------
-def _string_guess(label_raw: str) -> str | None:
-    s = str(label_raw).strip().lower()
-    if any(k in s for k in ["pos", "positive", "+"]):   return "positive"
-    if any(k in s for k in ["neg", "negative", "-"]):   return "negative"
-    if "neu" in s or "neutral" in s:                    return "neutral"
+def guess_label_from_string(raw: Any) -> Optional[str]:
+    try:
+        s = str(raw).lower()
+    except Exception:
+        return None
+    if any(k in s for k in ["pos", "positive", "+", "good", "happy"]):
+        return "positive"
+    if any(k in s for k in ["neg", "negative", "-", "sad", "bad", "angry"]):
+        return "negative"
+    if "neu" in s or "neutral" in s:
+        return "neutral"
     return None
 
-@st.cache_resource
-def infer_label_mapping(model, vectorizer):
+
+def infer_mapping_using_probes(model: Any, vectorizer: Any) -> Dict[Any, str]:
     """
-    Use probe sentences to infer how the model encodes labels.
-    Returns dict: {raw_label_from_model: 'positive'/'negative'/'neutral'}
-    Works for numeric or custom string labels; supports binary and 3-class.
+    Probe the model with three clear sentences to map raw outputs to canonical labels.
+    Returns {raw_value: canonical_label}
+    If anything fails, returns empty dict.
     """
-    try:
-        probes = {
-            "positive": "I am very happy and I love this! absolutely fantastic",
-            "negative": "I am very sad and hate this. absolutely terrible",
-            "neutral":  "It is okay, nothing special, just average"
-        }
-        mapping = {}
-        for canon, text in probes.items():
-            Xp = vectorizer.transform([text])
-            raw = model.predict(Xp)[0]
-            mapping[raw] = canon
-        # If binary, probes for neutral may collide with pos/neg; that's fine.
+    mapping: Dict[Any, str] = {}
+    if model is None or vectorizer is None:
         return mapping
+    probes = {
+        "positive": "I am very happy and I love this. Absolutely fantastic and great!",
+        "negative": "I am very sad and I hate this. Absolutely terrible and awful.",
+        "neutral":  "It was okay, average day, nothing special."
+    }
+    try:
+        for canonical, text in probes.items():
+            X = vectorizer.transform([text])
+            raw = model.predict(X)[0]
+            mapping[raw] = canonical
     except Exception:
         return {}
+    return mapping
 
-def predict_with_model(text: str):
+
+def predict_with_model(text: str) -> Tuple[str, Optional[float]]:
     """
-    Unified ML prediction:
-    - Uses mapping inferred from probes, or guesses from label strings.
-    - For binary models, applies a neutral band when confidence is low.
-    Returns (label, confidence)
+    Predict canonical label + confidence using ML model.
+    If model mapping is not determinable, raises RuntimeError to trigger fallback.
     """
     if ml_model is None or ml_vectorizer is None:
         raise RuntimeError("Model not loaded")
 
     X = ml_vectorizer.transform([text])
-    raw = ml_model.predict(X)[0]
 
-    # Try mapping inferred from probes
-    mapping = infer_label_mapping(ml_model, ml_vectorizer)
-    label = mapping.get(raw)
+    # raw prediction
+    raw_pred = ml_model.predict(X)[0]
 
-    # If still unknown, try string guess (handles 'POS','NEG','NEU')
+    # mapping from probes
+    mapping = infer_mapping_using_probes(ml_model, ml_vectorizer)
+    label = mapping.get(raw_pred)
+
+    # try string guess on raw_pred (covers textual labels like 'POS','NEG')
     if label is None:
-        label = _string_guess(raw)
+        label = guess_label_from_string(raw_pred)
 
-    # If still unknown and numeric classes, try using class index + probabilities
+    probs = None
+    classes = getattr(ml_model, "classes_", None)
     try:
-        classes = getattr(ml_model, "classes_", None)
-        probs = ml_model.predict_proba(X)[0] if hasattr(ml_model, "predict_proba") else None
+        if hasattr(ml_model, "predict_proba"):
+            probs = ml_model.predict_proba(X)[0]
     except Exception:
-        classes, probs = None, None
+        probs = None
 
+    # If label still unknown, attempt to use classes/probs heuristics
     if label is None and classes is not None:
-        # If classes are already textual, map them by string guess
-        if isinstance(classes[0], str):
-            idx = int(np.argmax(probs)) if probs is not None else 0
-            label = _string_guess(classes[idx])
-        else:
-            # Numeric classes: use probe mapping if available; otherwise heuristic:
-            # assume larger index is "more positive".
-            idx = int(np.argmax(probs)) if probs is not None else 0
-            # Sort unique classes to get stable order
-            ordered = list(sorted(classes))
-            if len(ordered) == 3:
-                # map lowest->negative, middle->neutral, highest->positive
-                if classes[idx] == ordered[2]: label = "positive"
-                elif classes[idx] == ordered[0]: label = "negative"
-                else: label = "neutral"
-            elif len(ordered) == 2:
-                # binary: highest index -> positive (heuristic)
-                label = "positive" if classes[idx] == ordered[1] else "negative"
+        try:
+            if probs is not None:
+                best_idx = int(np.argmax(probs))
+                candidate = classes[best_idx]
+                label = guess_label_from_string(candidate)
+            else:
+                ordered = list(sorted(classes))
+                raw_selected = raw_pred
+                # numeric classes heuristic
+                if len(ordered) == 3:
+                    if raw_selected == ordered[0]:
+                        label = "negative"
+                    elif raw_selected == ordered[1]:
+                        label = "neutral"
+                    else:
+                        label = "positive"
+                elif len(ordered) == 2:
+                    label = "positive" if raw_selected == ordered[1] else "negative"
+        except Exception:
+            label = None
 
-    # Final fallback: if still none, use rule-based
+    # final fallback -> if still None, use rule-based
     if label is None:
-        return rule_sentiment(text)
+        raise RuntimeError("Unable to map model output to canonical label")
 
-    # Confidence
+    # confidence
     conf = None
     if probs is not None:
         conf = float(np.max(probs))
-        # For binary models, introduce neutral band for low confidence
-        if len(classes) == 2 and conf < 0.60:
+        # for binary models, apply neutral band if confidence low
+        if len(probs) == 2 and conf < 0.60:
             label = "neutral"
 
     return label, (None if conf is None else round(conf, 2))
 
+
 # -------------------------
-# Streamlit Setup
+# Streamlit UI + logic
 # -------------------------
 st.set_page_config(page_title="Digital Mental Health", layout="wide")
-st.title("💬 Digital Mental Health Support")
-st.markdown("Analyze feedback, track emotions, and support well-being. If an ML model is in `models/`, it will be used automatically.")
+st.markdown("<h1 style='text-align:center'>💬 Digital Mental Health Support</h1>", unsafe_allow_html=True)
+st.markdown(
+    "<p style='text-align:center;color:gray;'>Sentiment analyzer + quick well-being check. Optional ML model: place files in <code>models/</code>.</p>",
+    unsafe_allow_html=True,
+)
 
-# -------------------------
-# Session State
-# -------------------------
+# Minimal styling for clean presentation
+st.markdown(
+    """
+<style>
+.center-block { max-width: 900px; margin:auto; }
+.card { background:white; padding:18px; border-radius:10px; box-shadow:0 3px 10px rgba(0,0,0,0.06); }
+.small { color:#666; font-size:14px; }
+</style>
+""",
+    unsafe_allow_html=True,
+)
+
+# initialize session state
 if "history" not in st.session_state:
-    st.session_state.history = []   # (comment, sentiment, confidence, method)
+    st.session_state.history = []  # tuples: (text, label, confidence, method)
 if "quiz_results" not in st.session_state:
-    st.session_state.quiz_results = []  # (total_score, message)
+    st.session_state.quiz_results = []  # tuples: (score, message)
 
-# -------------------------
-# Sidebar
-# -------------------------
-st.sidebar.title("🔎 Navigation")
-page = st.sidebar.radio("Go to", ["Student Dashboard", "Well-Being Check", "Admin Dashboard"])
-
-st.sidebar.title("⚙️ Sentiment Options")
-method_choice = st.sidebar.radio("Prediction method:", ["Rule-based (no dataset)", "ML model (if available)"])
-if method_choice == "ML model (if available)" and ml_model is None:
-    st.sidebar.warning("ML model not found. Falling back to rule-based analyzer.")
-
-# ====================================================
-# STUDENT DASHBOARD
-# ====================================================
-if page == "Student Dashboard":
-    st.header("Student Dashboard")
-    user_input = st.text_area("✍️ Enter a comment here:", height=120)
-
-    if st.button("Analyze Sentiment"):
-        if not user_input.strip():
-            st.warning("Please type a comment before analyzing.")
+# Sidebar: navigation + options
+with st.sidebar:
+    st.title("Navigation")
+    page = st.radio("", ["Student Dashboard", "Well-Being Check", "Admin Dashboard"])
+    st.markdown("---")
+    st.title("Options")
+    method_choice = st.radio("Prediction method:", ["Rule-based (no dataset)", "ML model (if available)"])
+    if method_choice == "ML model (if available)":
+        if ml_model is None:
+            st.warning("ML model not found — using rule-based fallback.")
         else:
-            if method_choice == "ML model (if available)" and ml_model is not None:
+            st.success("ML model loaded — using ML predictions where possible.")
+
+# ---------- Student Dashboard ----------
+if page == "Student Dashboard":
+    st.markdown("<div class='center-block card'>", unsafe_allow_html=True)
+    st.subheader("Sentiment Analyzer")
+    st.write("<div class='small'>Enter feedback or a short sentence and press Analyze.</div>", unsafe_allow_html=True)
+
+    user_input = st.text_area("", height=110)
+    col1, col2, col3 = st.columns([1.2, 1.2, 1.2])
+    with col1:
+        analyze_btn = st.button("Analyze", use_container_width=True)
+    with col2:
+        clear_recent = st.button("Clear Recent Analyses", use_container_width=True)
+    with col3:
+        st.write("")
+
+    if clear_recent:
+        st.session_state.history = []
+        st.success("Cleared recent analyses.")
+
+    if analyze_btn:
+        if not user_input.strip():
+            st.warning("Please enter text to analyze.")
+        else:
+            # prefer ML if chosen and available
+            if method_choice == "ML model (if available)" and ml_model is not None and ml_vectorizer is not None:
                 try:
                     label, confidence = predict_with_model(user_input)
-                    method = "ml_model"
+                    used_method = "ml_model"
                 except Exception:
-                    st.error("Error using ML model — falling back to rule-based analyzer.")
+                    # fallback quietly to rule-based
                     label, confidence = rule_sentiment(user_input)
-                    method = "rule_based"
+                    used_method = "rule_based"
             else:
                 label, confidence = rule_sentiment(user_input)
-                method = "rule_based"
+                used_method = "rule_based"
 
-            st.session_state.history.append((user_input, label, confidence, method))
+            st.session_state.history.append((user_input, label, confidence, used_method))
 
-            # Show result + tips
+            # show result and short helpful tips
             if label == "positive":
-                st.success(f"😊 Sentiment: Positive (confidence: {confidence})")
-                st.write("✅ Keep it up! Share your joy, keep journaling positives.")
+                st.success(f"😊 Positive — confidence: {confidence}")
+                st.markdown("- Keep journaling positive moments\n- Share your happiness with someone")
             elif label == "negative":
-                st.error(f"😞 Sentiment: Negative (confidence: {confidence})")
-                st.write("💡 Try breathing exercises, short walks, or talking to a friend.")
+                st.error(f"😞 Negative — confidence: {confidence}")
+                st.markdown("- Try 2 minutes deep breathing\n- Take a short walk or speak with a friend or counselor")
             else:
-                st.info(f"😐 Sentiment: Neutral (confidence: {confidence})")
-                st.write("🎧 Play calming music, stretch, or hydrate.")
+                st.info(f"😐 Neutral — confidence: {confidence}")
+                st.markdown("- Try a small uplifting activity: listen to music, stretch, hydrate")
 
-    st.write("---")
-    st.subheader("📜 Recent Analyses")
+    st.markdown("---")
+    st.subheader("Recent Analyses")
     if st.session_state.history:
-        df_hist = pd.DataFrame(st.session_state.history[::-1], columns=["Comment","Sentiment","Confidence","Method"]).head(10)
-        st.dataframe(df_hist, use_container_width=True)
+        df_hist = pd.DataFrame(st.session_state.history[::-1], columns=["Comment", "Sentiment", "Confidence", "Method"]).head(10)
+        st.table(df_hist)
     else:
-        st.write("No analyses yet.")
+        st.info("No analyses yet — add one above to populate the list.")
 
-    st.write("---")
-    st.subheader("📊 Sentiment Distribution")
+    st.markdown("---")
+    st.subheader("Sentiment Distribution")
     if st.session_state.history:
-        preds = [p for _, p, _, _ in st.session_state.history]
-        counts = {"positive": preds.count("positive"), "negative": preds.count("negative"), "neutral": preds.count("neutral")}
-        vals = [counts["positive"], counts["negative"], counts["neutral"]]
-        if sum(vals) == 0:
+        preds = [lbl for _, lbl, _, _ in st.session_state.history]
+        counts = {
+            "positive": preds.count("positive"),
+            "negative": preds.count("negative"),
+            "neutral": preds.count("neutral"),
+        }
+        keys = list(counts.keys())
+        vals = [counts[k] for k in keys]
+        total = sum(vals)
+        if total == 0:
             st.info("No sentiment data yet.")
         else:
-            try:
-                fig, ax = plt.subplots()
-                ax.pie(vals, labels=counts.keys(), autopct="%1.1f%%", startangle=90, wedgeprops=dict(width=0.4))
-                ax.axis("equal")
-                st.pyplot(fig)
-            except Exception:
-                st.bar_chart(pd.DataFrame({"count": vals}, index=counts.keys()))
+            # create donut pie + legend to avoid overlapping labels
+            fig, ax = plt.subplots(figsize=(6, 4), dpi=90)
+            wedges, texts = ax.pie(vals, startangle=90, wedgeprops=dict(width=0.45), labels=None)
+            ax.set(aspect="equal")
+            # center text total
+            ax.text(0, 0, f"{total}\nresponses", ha="center", va="center", fontsize=12)
+            # legend on the right
+            ax.legend(wedges, [f"{k} ({counts[k]})" for k in keys], title="Sentiment", loc="center left", bbox_to_anchor=(1, 0, 0.3, 1))
+            st.pyplot(fig, bbox_inches="tight")
     else:
         st.write("No data yet to show distribution.")
+    st.markdown("</div>", unsafe_allow_html=True)
 
-# ====================================================
-# WELL-BEING CHECK (MCQ)
-# ====================================================
+# ---------- Well-Being Check ----------
 elif page == "Well-Being Check":
-    st.header("🌱 Well-being Check")
-    st.write("Answer 5 quick questions about your well-being.")
+    st.markdown("<div class='center-block card'>", unsafe_allow_html=True)
+    st.subheader("🌱 Quick Well-being Check")
+    st.write("<div class='small'>5 short questions — quick self-check (not a diagnosis).</div>", unsafe_allow_html=True)
 
     QUESTIONS = [
-        {"q":"How is your mood today?","options":{"😊 Happy/positive":4,"😐 Neutral/okay":2,"😞 Sad/low":1}},
-        {"q":"How much energy do you have right now?","options":{"⚡ Full of energy":4,"🙂 Somewhat energetic":3,"😴 Tired/exhausted":1}},
-        {"q":"How stressed do you feel?","options":{"😌 Calm/relaxed":4,"😕 A bit stressed":2,"😫 Very stressed":1}},
-        {"q":"How was your sleep recently?","options":{"🌙 Slept well":4,"😶 Average sleep":2,"🥱 Poor sleep":1}},
-        {"q":"How connected do you feel socially?","options":{"👥 Very connected":4,"🙂 Somewhat connected":2,"😔 Lonely/isolated":1}}
+        {"q": "How is your mood today?", "options": {"😊 Happy/positive": 4, "😐 Neutral/okay": 2, "😞 Sad/low": 1}},
+        {"q": "How much energy do you have right now?", "options": {"⚡ Full of energy": 4, "🙂 Somewhat energetic": 3, "😴 Tired/exhausted": 1}},
+        {"q": "How stressed do you feel?", "options": {"😌 Calm/relaxed": 4, "😕 A bit stressed": 2, "😫 Very stressed": 1}},
+        {"q": "How was your sleep recently?", "options": {"🌙 Slept well": 4, "😶 Average sleep": 2, "🥱 Poor sleep": 1}},
+        {"q": "How connected do you feel socially?", "options": {"👥 Very connected": 4, "🙂 Somewhat connected": 2, "😔 Lonely/isolated": 1}},
     ]
 
     responses = []
-    for i,q in enumerate(QUESTIONS):
-        st.markdown(f"**{q['q']}**")
-        choice = st.radio("", list(q["options"].keys()), key=f"quiz_q{i}")
+    for i, q in enumerate(QUESTIONS):
+        st.write(f"**{i+1}. {q['q']}**")
+        choice = st.radio("", list(q["options"].keys()), key=f"wb_q{i}")
         responses.append(q["options"][choice])
 
-    if st.button("✨ Submit Well-being Check", use_container_width=True):
+    if st.button("Submit Well-being Check", use_container_width=True):
         total = sum(responses)
         if total >= 17:
             msg = "🌟 You seem happy and doing well! Keep up your positive habits."
             st.success(msg)
         elif 12 <= total < 17:
-            msg = "🙂 You seem okay, but could use some self-care."
+            msg = "🙂 You seem okay, but could use some self-care. Try short breaks and relaxation."
             st.info(msg)
         else:
-            msg = "💡 You may be stressed or feeling low. Try relaxation techniques or seek support."
+            msg = "💡 You may be stressed or feeling low. Consider relaxation techniques or reaching out for support."
             st.warning(msg)
-
         st.session_state.quiz_results.append((total, msg))
+        st.markdown("<div class='small'>Note: This is not a clinical diagnosis.</div>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
-        st.write("---")
-        st.write("**Note:** This is not a diagnosis, just a self-check. For persistent issues, seek professional help.")
-
-# ====================================================
-# ADMIN DASHBOARD
-# ====================================================
+# ---------- Admin Dashboard ----------
 elif page == "Admin Dashboard":
-    st.header("🛠️ Admin Dashboard")
+    st.markdown("<div class='center-block card'>", unsafe_allow_html=True)
+    st.subheader("Admin Dashboard")
 
     if not st.session_state.history and not st.session_state.quiz_results:
-        st.warning("No student feedback or quiz results available yet.")
+        st.info("No feedback or quiz results yet.")
     else:
         if st.session_state.history:
-            df = pd.DataFrame(st.session_state.history, columns=["Comment","Sentiment","Confidence","Method"])
-            st.subheader("📋 Student Comments")
-            st.dataframe(df, use_container_width=True)
-
-            st.subheader("📊 Sentiment Summary")
+            st.write("Student Comments")
+            df = pd.DataFrame(st.session_state.history, columns=["Comment", "Sentiment", "Confidence", "Method"])
+            st.table(df)
+            st.write("Sentiment summary")
             st.bar_chart(df["Sentiment"].value_counts())
 
-            st.subheader("🚩 Flagged Negative Comments")
-            negatives = df[df["Sentiment"]=="negative"]["Comment"].tolist()
+            st.write("Flagged negative comments")
+            negatives = df[df["Sentiment"] == "negative"]["Comment"].tolist()
             if negatives:
-                for c in negatives: st.write(f"- {c}")
+                for n in negatives:
+                    st.write("- " + n)
             else:
-                st.write("✅ No negative comments detected.")
+                st.write("No negative comments detected.")
 
         if st.session_state.quiz_results:
-            quiz_df = pd.DataFrame(st.session_state.quiz_results, columns=["Score","Result"])
-            st.subheader("📝 Well-being Quiz Results")
-            st.dataframe(quiz_df, use_container_width=True)
-            st.bar_chart(quiz_df["Score"])
+            st.write("Well-being Check Results")
+            qdf = pd.DataFrame(st.session_state.quiz_results, columns=["Score", "Result"])
+            st.table(qdf)
+            st.bar_chart(qdf["Score"])
+    st.markdown("</div>", unsafe_allow_html=True)
 
-# -------------------------
 # Footer
-# -------------------------
 st.markdown("---")
-st.caption("Built-in analyzer requires no dataset. If you add a trained ML model to `models/`, the app auto-detects it.")
+st.caption("Presentation-ready: simple UI, clear controls. To use ML prediction add `models/sentiment_model.pkl` and `models/vectorizer.pkl` (joblib) into the project.")
