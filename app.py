@@ -123,30 +123,12 @@ elif st.session_state.page == "Student Dashboard":
                 st.session_state.history = []
             st.session_state.history.append((user_input, label))
 
-            # Show result
             if label == "positive":
                 st.success(f"😊 Positive")
             elif label == "negative":
                 st.error(f"😞 Negative")
             else:
                 st.info(f"😐 Neutral")
-
-            # Well-being tips
-            st.markdown("<div class='card'><h4>🌱 Recommended Tips</h4></div>", unsafe_allow_html=True)
-            if label == "positive":
-                st.write("✅ Keep up the good vibes! You can:")
-                st.write("- Share your happiness with a friend")
-                st.write("- Keep journaling positive experiences")
-            elif label == "negative":
-                st.write("💡 Here are some tips to feel better:")
-                st.write("- Take deep breaths for 2 minutes")
-                st.write("- Go outdoors for a short walk")
-                st.write("- Talk to a trusted friend or counselor")
-            else:  # neutral
-                st.write("😐 Neutral mood detected. Try these to boost your day:")
-                st.write("- Listen to calming music")
-                st.write("- Stretch or do light exercise")
-                st.write("- Drink water and stay hydrated")
 
     if "history" in st.session_state and st.session_state.history:
         st.markdown("<div class='card'><h4>📜 Recent Analyses</h4></div>", unsafe_allow_html=True)
