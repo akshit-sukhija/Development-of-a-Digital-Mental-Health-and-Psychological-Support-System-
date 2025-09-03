@@ -101,8 +101,8 @@ def rule_sentiment(text: str):
 @st.cache_resource
 def try_load_ml_model():
     try:
-        model = joblib.load("models/sentiment_model.pkl")
-        vectorizer = joblib.load("models/vectorizer.pkl")
+        model = joblib.load("sentiment_model.pkl")
+        vectorizer = joblib.load("vectorizer.pkl")
         return model, vectorizer
     except Exception:
         return None, None
@@ -401,3 +401,4 @@ elif page == "Admin Dashboard":
 # Footer
 st.markdown("---")
 st.caption("Includes a built-in rule-based analyzer and optional ML model. Add a trained model to 'models/' to enable ML predictions.")
+
