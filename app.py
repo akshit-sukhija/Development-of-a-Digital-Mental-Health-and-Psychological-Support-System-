@@ -44,8 +44,8 @@ def rule_sentiment(text: str):
 @st.cache_resource
 def load_model():
     try:
-        model = joblib.load("models/sentiment_model.pkl")
-        vectorizer = joblib.load("models/vectorizer.pkl")
+        model = joblib.load("sentiment_model.pkl")
+        vectorizer = joblib.load("vectorizer.pkl")
         return model, vectorizer
     except Exception:
         return None, None
@@ -309,3 +309,4 @@ elif page == "Admin Dashboard":
 # -------------------------
 st.markdown("---")
 st.caption("Built-in analyzer requires no dataset. If you add a trained ML model to `models/`, the app auto-detects it.")
+
