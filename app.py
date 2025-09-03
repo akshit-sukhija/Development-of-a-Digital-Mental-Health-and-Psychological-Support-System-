@@ -1,14 +1,21 @@
 import streamlit as st
 import joblib
-import pandas as pd
 import matplotlib.pyplot as plt
+import pandas as pd
 import re
 
 # -------------------------
-# Rule-based lexicon analyzer
+# Rule-based lexicon analyzer (no dataset required)
 # -------------------------
-POS_WORDS = {"good", "great", "happy", "joy", "love", "awesome", "fantastic", "relieved", "satisfied", "hopeful", "calm", "better", "improved", "positive", "grateful"}
-NEG_WORDS = {"sad", "depressed", "angry", "upset", "anxious", "worried", "hopeless", "terrible", "awful", "stress", "stressed", "pain", "hurt", "bad", "negative", "lonely", "suicidal", "angst", "panic"}
+POS_WORDS = {
+    "good", "great", "happy", "joy", "love", "awesome", "fantastic", "relieved",
+    "satisfied", "hopeful", "calm", "better", "improved", "positive", "grateful"
+}
+NEG_WORDS = {
+    "sad", "depressed", "angry", "upset", "anxious", "worried", "hopeless",
+    "terrible", "awful", "stress", "stressed", "pain", "hurt", "bad", "negative",
+    "lonely", "suicidal", "angst", "panic"
+}
 NEGATIONS = {"not", "no", "never", "n't", "hardly", "rarely"}
 INTENSIFIERS = {"very", "extremely", "really", "so", "too", "super"}
 
@@ -19,24 +26,37 @@ def tokenize(text):
 
 def rule_sentiment(text):
     tokens = tokenize(text)
-    score, i = 0.0, 0
+    score = 0.0
+    i = 0
     while i < len(tokens):
-        t, weight = tokens[i], 1.0
+        t = tokens[i]
+        weight = 1.0
         if t in INTENSIFIERS and i + 1 < len(tokens):
-            weight, i, t = 1.8, i + 1, tokens[i + 1]
+            weight = 1.8
+            i += 1
+            t = tokens[i]
         neg_window = tokens[max(0, i - 3):i]
         is_negated = any(w in NEGATIONS for w in neg_window)
-        if t in POS_WORDS: score += weight * (-1.0 if is_negated else 1.0)
-        elif t in NEG_WORDS: score += weight * (1.0 if is_negated else -1.0)
+        if t in POS_WORDS:
+            score += weight * (-1.0 if is_negated else 1.0)
+        elif t in NEG_WORDS:
+            score += weight * (1.0 if is_negated else -1.0)
         i += 1
-    normalized = score / max(1.0, len(tokens))
-    if normalized > 0.05: label = "positive"
-    elif normalized < -0.05: label = "negative"
-    else: label = "neutral"
-    return label, round(min(1.0, abs(normalized) * 5.0), 2)
+
+    denom = max(1.0, len(tokens))
+    normalized = score / denom
+
+    if normalized > 0.05:
+        label = "positive"
+    elif normalized < -0.05:
+        label = "negative"
+    else:
+        label = "neutral"
+    confidence = min(1.0, abs(normalized) * 5.0)
+    return label, round(confidence, 2)
 
 # -------------------------
-# Try load ML model
+# Optional: Load ML model
 # -------------------------
 @st.cache_resource
 def try_load_ml_model():
@@ -47,125 +67,202 @@ def try_load_ml_model():
     except Exception:
         return None, None
 
-ml_model, ml_vectorizer = try_load_ml_model()
-
 # -------------------------
 # Streamlit Setup
 # -------------------------
-st.set_page_config(page_title="Digital Mental Health Support", layout="wide")
+st.set_page_config(page_title="Digital Mental Health", layout="wide")
+st.title("💬 Digital Mental Health Support")
+st.markdown("A convenient sentiment analyzer for students — no dataset or technical skills required.")
 
-# Inject custom CSS
-st.markdown("""
-<style>
-body { background-color: #F5F7FA; color: #333333; }
-.navbar { display: flex; justify-content: space-between; align-items: center; padding: 12px 24px; background: white; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.1);}
-.nav-left { font-size: 20px; font-weight: bold; color: #4CAF50; }
-.nav-center { display: flex; gap: 24px; }
-.nav-item { font-size: 16px; cursor: pointer; padding: 6px 12px; border-radius: 6px; }
-.nav-item:hover { background: #E8F5E9; }
-.nav-active { background: #4CAF50; color: white; }
-.card { background: white; border-radius: 16px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);}
-.btn-analyze { background: linear-gradient(90deg, #4CAF50, #2196F3); color: white; border: none; padding: 12px; border-radius: 8px; width: 100%; font-size: 16px; font-weight: bold; cursor: pointer; }
-.btn-analyze:hover { opacity: 0.9; }
-.footer { text-align: center; margin-top: 30px; color: #777; font-size: 14px; }
-</style>
-""", unsafe_allow_html=True)
+ml_model, ml_vectorizer = try_load_ml_model()
+if ml_model is None:
+    st.info("No ML model found. Using built-in rule-based sentiment analyzer.")
+else:
+    st.success("Optional ML model loaded — you can switch to it in the sidebar.")
+
+if "history" not in st.session_state:
+    st.session_state.history = []
+if "quiz_taken" not in st.session_state:
+    st.session_state.quiz_taken = False
+if "quiz_score" not in st.session_state:
+    st.session_state.quiz_score = None
 
 # -------------------------
-# Top Navigation
+# Sidebar
 # -------------------------
-if "page" not in st.session_state:
-    st.session_state.page = "Home"
+st.sidebar.title("🔎 Navigation")
+page = st.sidebar.radio("Go to", ["Student Dashboard", "MCQ Quiz", "Admin Dashboard"])
 
-nav_items = ["Home", "Student Dashboard", "Admin Dashboard", "About"]
-cols = st.columns([2,6,2])
-with cols[0]: st.markdown('<div class="nav-left">🌿 Digital Mental Health</div>', unsafe_allow_html=True)
-with cols[1]:
-    nav_html = '<div class="nav-center">'
-    for item in nav_items:
-        cls = "nav-item nav-active" if st.session_state.page == item else "nav-item"
-        nav_html += f'<span class="{cls}" onclick="window.parent.postMessage({{type: \'streamlit:setSessionState\', key: \'page\', value: \'{item}\' }}, \'*\')">{item}</span>'
-    nav_html += '</div>'
-    st.markdown(nav_html, unsafe_allow_html=True)
+st.sidebar.title("⚙️ Sentiment Options")
+method_choice = st.sidebar.radio("Prediction method:", ["Rule-based (no dataset)", "ML model (if available)"])
+if method_choice == "ML model (if available)" and ml_model is None:
+    st.sidebar.warning("ML model not found. Falling back to rule-based analyzer.")
 
-st.write("")  # spacing
+# ====================================================
+# STUDENT DASHBOARD
+# ====================================================
+if page == "Student Dashboard":
+    st.header("Student Dashboard")
+    user_input = st.text_area("✍️ Enter a comment here:", height=120)
 
-# -------------------------
-# Home Page
-# -------------------------
-if st.session_state.page == "Home":
-    st.markdown("<div class='card'>"
-                "<h2>🌿 Digital Mental Health Support</h2>"
-                "<p><i>\"Analyze feedback, track emotions, and support well-being\"</i></p>"
-                "</div>", unsafe_allow_html=True)
-
-# -------------------------
-# Student Dashboard
-# -------------------------
-elif st.session_state.page == "Student Dashboard":
-    st.markdown("<div class='card'><h3>✍️ Sentiment Analyzer</h3></div>", unsafe_allow_html=True)
-    user_input = st.text_area("Type your thoughts here...", height=100)
-    if st.button("💡 Analyze Sentiment", use_container_width=True):
-        if not user_input.strip():
-            st.warning("Please type something.")
-        else:
-            if ml_model:
-                try:
-                    X = ml_vectorizer.transform([user_input])
-                    pred_raw = ml_model.predict(X)[0]
-                    label = str(pred_raw).lower()
-                except Exception:
-                    label, conf = rule_sentiment(user_input)
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        if st.button("Analyze Sentiment"):
+            if not user_input.strip():
+                st.warning("Please type a comment before analyzing.")
             else:
-                label, conf = rule_sentiment(user_input)
+                if method_choice == "ML model (if available)" and ml_model is not None:
+                    try:
+                        X = ml_vectorizer.transform([user_input])
+                        pred_raw = ml_model.predict(X)[0]
+                        label = str(pred_raw).lower()
+                        confidence = None
+                        try:
+                            probs = ml_model.predict_proba(X)[0]
+                            confidence = round(max(probs), 2)
+                        except Exception:
+                            confidence = None
+                        method = "ml_model"
+                    except Exception:
+                        st.error("Error using ML model — falling back to rule-based analyzer.")
+                        label, confidence = rule_sentiment(user_input)
+                        method = "rule_based"
+                else:
+                    label, confidence = rule_sentiment(user_input)
+                    method = "rule_based"
 
-            if "history" not in st.session_state:
-                st.session_state.history = []
-            st.session_state.history.append((user_input, label))
+                st.session_state.history.append((user_input, label, confidence, method))
 
-            if label == "positive":
-                st.success(f"😊 Positive")
-            elif label == "negative":
-                st.error(f"😞 Negative")
-            else:
-                st.info(f"😐 Neutral")
+                if label == "positive":
+                    st.success(f"😊 Sentiment: Positive (confidence: {confidence})")
+                elif label == "negative":
+                    st.error(f"😞 Sentiment: Negative (confidence: {confidence})")
+                else:
+                    st.info(f"😐 Sentiment: Neutral (confidence: {confidence})")
 
-    if "history" in st.session_state and st.session_state.history:
-        st.markdown("<div class='card'><h4>📜 Recent Analyses</h4></div>", unsafe_allow_html=True)
-        for text, lbl in st.session_state.history[-3:][::-1]:
-            if lbl == "positive": st.write(f"😊 **Positive:** {text}")
-            elif lbl == "negative": st.write(f"😞 **Negative:** {text}")
-            else: st.write(f"😐 **Neutral:** {text}")
+    with col2:
+        st.markdown("**Quick tips for non-technical users:**")
+        st.markdown("""
+        - Use short, honest sentences (e.g. *"I feel anxious about exams"*).
+        - The analyzer detects positive/negative words and simple negations.
+        - If you upload an ML model to `models/`, you can switch to it from the sidebar.
+        """)
 
-        preds = [lbl for _, lbl in st.session_state.history]
-        counts = {"Positive": preds.count("positive"), "Negative": preds.count("negative"), "Neutral": preds.count("neutral")}
-        vals = list(counts.values())
-        if sum(vals) > 0:
-            fig, ax = plt.subplots()
-            ax.pie(vals, labels=counts.keys(), autopct="%1.1f%%", startangle=90, wedgeprops=dict(width=0.4))
-            st.pyplot(fig)
-
-# -------------------------
-# Admin Dashboard
-# -------------------------
-elif st.session_state.page == "Admin Dashboard":
-    st.markdown("<div class='card'><h3>📊 Admin Dashboard</h3></div>", unsafe_allow_html=True)
-    if "history" not in st.session_state or not st.session_state.history:
-        st.warning("No feedback yet.")
+    st.write("---")
+    st.subheader("📜 Recent Analyses")
+    if st.session_state.history:
+        df_hist = pd.DataFrame(st.session_state.history[::-1], columns=["Comment", "Sentiment", "Confidence", "Method"]).head(10)
+        st.dataframe(df_hist)
     else:
-        df = pd.DataFrame(st.session_state.history, columns=["Comment", "Sentiment"])
+        st.write("No analyses yet.")
+
+    st.write("---")
+    st.subheader("📊 Sentiment Distribution")
+    if st.session_state.history:
+        preds = [p for _, p, _, _ in st.session_state.history]
+        counts = {"positive": preds.count("positive"), "negative": preds.count("negative"), "neutral": preds.count("neutral")}
+        keys = ["positive", "negative", "neutral"]
+        vals = [max(0, int(counts.get(k, 0))) for k in keys]
+        total = sum(vals)
+
+        if total == 0:
+            st.info("No sentiment data yet. Enter a comment and analyze it to populate the chart.")
+        else:
+            try:
+                fig, ax = plt.subplots()
+                ax.pie(vals, labels=keys, autopct="%1.1f%%", startangle=90)
+                ax.axis("equal")
+                st.pyplot(fig)
+            except Exception as e:
+                st.warning("Pie chart failed — showing bar chart instead.")
+                st.bar_chart(pd.DataFrame({"count": vals}, index=keys))
+    else:
+        st.write("No data yet to show distribution.")
+
+# ====================================================
+# MCQ QUIZ
+# ====================================================
+elif page == "MCQ Quiz":
+    st.header("MCQ: Mental Health Awareness")
+    st.write("Take this short quiz to learn about mental health. Immediate feedback is provided.")
+
+    MCQS = [
+        {
+            "q": "Which of the following is a common sign of high stress?",
+            "choices": ["Increased concentration", "Sleep disturbances", "Steady appetite", "Improved mood"],
+            "correct": 1,
+            "explain": "Stress often disrupts sleep patterns, causing insomnia or poor-quality sleep."
+        },
+        {
+            "q": "What is a recommended first step if someone feels very low or suicidal?",
+            "choices": ["Ignore it", "Share with a trusted person or helpline", "Drink alcohol", "Post publicly for attention"],
+            "correct": 1,
+            "explain": "Talking to a trusted person or helpline is a safe first step."
+        },
+        {
+            "q": "Which activity helps reduce short-term anxiety?",
+            "choices": ["Deep breathing", "Avoiding sleep", "Isolating from loved ones", "Withdrawing socially"],
+            "correct": 0,
+            "explain": "Deep breathing calms the nervous system and reduces anxiety."
+        },
+        {
+            "q": "Persistent sadness for more than 2 weeks may indicate:",
+            "choices": ["Passing mood", "Depression requiring attention", "Always normal", "Only physical illness"],
+            "correct": 1,
+            "explain": "Persistent low mood can be a sign of depression and should be checked."
+        },
+        {
+            "q": "Which is a healthy coping strategy?",
+            "choices": ["Talking with a friend", "Binge drinking", "Ignoring the problem", "Self-harm"],
+            "correct": 0,
+            "explain": "Reaching out to supportive people is a healthy way to cope."
+        }
+    ]
+
+    answers = []
+    for i, item in enumerate(MCQS):
+        st.markdown(f"**Q{i+1}. {item['q']}**")
+        choice = st.radio(f"Select one (Q{i+1})", item["choices"], key=f"q{i}")
+        answers.append(item["choices"].index(choice))
+
+    if st.button("Submit Quiz"):
+        score = 0
+        for i, item in enumerate(MCQS):
+            correct = item["correct"]
+            if answers[i] == correct:
+                score += 1
+                st.write(f"Q{i+1}: ✅ Correct — {item['explain']}")
+            else:
+                st.write(f"Q{i+1}: ❌ Incorrect — {item['explain']}")
+        st.session_state.quiz_taken = True
+        st.session_state.quiz_score = score
+        st.success(f"You scored {score} out of {len(MCQS)}")
+
+    if st.session_state.quiz_taken:
+        st.info(f"Last quiz score: {st.session_state.quiz_score} / {len(MCQS)}")
+
+# ====================================================
+# ADMIN DASHBOARD
+# ====================================================
+elif page == "Admin Dashboard":
+    st.header("🛠️ Admin Dashboard")
+    if not st.session_state.history:
+        st.warning("No student feedback available yet.")
+    else:
+        df = pd.DataFrame(st.session_state.history, columns=["Comment", "Sentiment", "Confidence", "Method"])
+        st.subheader("📋 Student Comments")
         st.dataframe(df)
 
-        st.subheader("Aggregate Sentiment")
+        st.subheader("📊 Overall Sentiment Summary")
         st.bar_chart(df["Sentiment"].value_counts())
 
-# -------------------------
-# About Page
-# -------------------------
-elif st.session_state.page == "About":
-    st.markdown("<div class='card'><h3>ℹ️ About</h3>"
-                "<p>This project helps students reflect on their emotions by analyzing feedback and visualizing sentiments.</p>"
-                "<p>Designed with ❤️ for mental well-being.</p></div>", unsafe_allow_html=True)
+        st.subheader("🚩 Flagged Negative Comments")
+        negatives = df[df["Sentiment"] == "negative"]["Comment"].tolist()
+        if negatives:
+            for c in negatives:
+                st.write(f"- {c}")
+        else:
+            st.write("✅ No negative comments detected.")
 
-# Footer
-st.markdown("<div class='footer'>Made with ❤️ by Team XYZ</div>", unsafe_allow_html=True)
+st.markdown("---")
+st.caption("Runs with a built-in analyzer (no dataset needed). If you add a trained ML model to `models/`, you can switch to it.")
