@@ -192,12 +192,74 @@ def predict_with_model(text: str) -> Tuple[str, Optional[float]]:
 
 
 # -------------------------
+# New: Risk mapping + triage report (minimal rule-based clinical layer)
+# -------------------------
+def map_sentiment_to_risk(text: str, sentiment_label: str) -> Tuple[str, str]:
+    """
+    Map sentiment + keyword signals into clinical triage categories.
+    Returns (risk_level, recommendation)
+    """
+    text_lower = (text or "").lower()
+
+    # high-risk explicit indicators
+    high_risk_keywords = [
+        "suicide", "kill myself", "end my life", "end it all", "hopeless",
+        "self harm", "self-harm", "no reason to live", "worthless", "want to die"
+    ]
+
+    medium_risk_keywords = [
+        "depressed", "depression", "anxious", "anxiety", "overwhelmed",
+        "stressed", "lonely", "burnout", "panic attack", "panic"
+    ]
+
+    for kw in high_risk_keywords:
+        if kw in text_lower:
+            return "HIGH", "Immediate professional intervention advised. If imminent harm is mentioned, contact emergency services or crisis line."
+
+    for kw in medium_risk_keywords:
+        if kw in text_lower:
+            return "MEDIUM", "Signs of significant distress. Recommend scheduling a counseling / mental health consultation soon."
+
+    # fallback rules using sentiment
+    if sentiment_label == "negative":
+        return "MEDIUM", "Emotional distress detected. Consider supportive resources and follow up."
+
+    return "LOW", "No critical distress detected. Encourage self-care and monitoring."
+
+def build_triage_report(text: str, risk: str, recommendation: str) -> str:
+    """
+    Construct a structured triage report for display.
+    """
+    indicators = []
+    if risk == "HIGH":
+        indicators = ["Suicidal ideation or explicit harm language"]
+    elif risk == "MEDIUM":
+        indicators = ["Depressive/anxiety language", "Stress/overwhelm signals"]
+    else:
+        indicators = ["No acute distress signals"]
+
+    indicators_md = "\n".join(f"- {i}" for i in indicators)
+
+    report = f"""
+**Mental Risk Level:** **{risk}**
+
+**Detected Indicators:**
+{indicators_md}
+
+**Triage Recommendation:**
+{recommendation}
+
+**Disclaimer:** This tool is for early screening and support. It does NOT replace clinical diagnosis. Always consult a licensed professional for assessment.
+"""
+    return report
+
+# -------------------------
 # Streamlit UI + logic
 # -------------------------
 st.set_page_config(page_title="Digital Mental Health", layout="wide")
 st.markdown("<h1 style='text-align:center'>💬 Digital Mental Health Support</h1>", unsafe_allow_html=True)
 st.markdown(
-    "<p style='text-align:center;color:gray;'>Sentiment analyzer + quick well-being check. Optional ML model: place files in <code>models/</code>.</p>",
+    "<p style='text-align:center;color:gray;'>Mental Health Risk Assessment — quick well-being check and early triage. Optional ML model: place files in <code>models/</code>.</p>",
     unsafe_allow_html=True,
 )
 
@@ -208,6 +270,10 @@ st.markdown(
 .center-block { max-width: 900px; margin:auto; }
 .card { background:white; padding:18px; border-radius:10px; box-shadow:0 3px 10px rgba(0,0,0,0.06); }
 .small { color:#666; font-size:14px; }
+.risk-badge { padding:8px 12px; border-radius:8px; color:white; display:inline-block; font-weight:600; }
+.risk-high { background:#d9534f; }
+.risk-medium { background:#f0ad4e; color:#1f1f1f; }
+.risk-low { background:#5cb85c; }
 </style>
 """,
     unsafe_allow_html=True,
@@ -218,6 +284,8 @@ if "history" not in st.session_state:
     st.session_state.history = []  # tuples: (text, label, confidence, method)
 if "quiz_results" not in st.session_state:
     st.session_state.quiz_results = []  # tuples: (score, message)
+if "reports" not in st.session_state:
+    st.session_state.reports = []  # list of triage reports (text, risk, recommendation)
 
 # Sidebar: navigation + options
 with st.sidebar:
@@ -235,13 +303,13 @@ with st.sidebar:
 # ---------- Student Dashboard ----------
 if page == "Student Dashboard":
     st.markdown("<div class='center-block card'>", unsafe_allow_html=True)
-    st.subheader("Sentiment Analyzer")
-    st.write("<div class='small'>Enter feedback or a short sentence and press Analyze.</div>", unsafe_allow_html=True)
+    st.subheader("Mental Health Risk Assessment")
+    st.write("<div class='small'>Enter a short message or feedback and press Assess to get a quick triage summary (not a diagnosis).</div>", unsafe_allow_html=True)
 
     user_input = st.text_area("", height=110)
     col1, col2, col3 = st.columns([1.2, 1.2, 1.2])
     with col1:
-        analyze_btn = st.button("Analyze", use_container_width=True)
+        analyze_btn = st.button("Assess Mental Risk", use_container_width=True)
     with col2:
         clear_recent = st.button("Clear Recent Analyses", use_container_width=True)
     with col3:
@@ -249,7 +317,8 @@ if page == "Student Dashboard":
 
     if clear_recent:
         st.session_state.history = []
-        st.success("Cleared recent analyses.")
+        st.session_state.reports = []
+        st.success("Cleared recent analyses and reports.")
 
     if analyze_btn:
         if not user_input.strip():
@@ -268,17 +337,31 @@ if page == "Student Dashboard":
                 label, confidence = rule_sentiment(user_input)
                 used_method = "rule_based"
 
+            # store basic sentiment history (keeps your existing tables/charts working)
             st.session_state.history.append((user_input, label, confidence, used_method))
 
-            # show result and short helpful tips
+            # --- new clinical triage layer ---
+            risk, recommendation = map_sentiment_to_risk(user_input, label)
+            report_md = build_triage_report(user_input, risk, recommendation)
+            st.session_state.reports.append((user_input, risk, recommendation, report_md))
+
+            # show colored risk badge + structured triage report
+            if risk == "HIGH":
+                st.markdown(f"<div class='risk-badge risk-high'>HIGH RISK</div>", unsafe_allow_html=True)
+                st.error(report_md, icon="⚠️")
+            elif risk == "MEDIUM":
+                st.markdown(f"<div class='risk-badge risk-medium'>MEDIUM RISK</div>", unsafe_allow_html=True)
+                st.warning(report_md)
+            else:
+                st.markdown(f"<div class='risk-badge risk-low'>LOW RISK</div>", unsafe_allow_html=True)
+                st.success(report_md)
+
+            # show helpful tips (existing behavior)
             if label == "positive":
-                st.success(f"😊 Positive — confidence: {confidence}")
                 st.markdown("- Keep journaling positive moments\n- Share your happiness with someone")
             elif label == "negative":
-                st.error(f"😞 Negative — confidence: {confidence}")
                 st.markdown("- Try 2 minutes deep breathing\n- Take a short walk or speak with a friend or counselor")
             else:
-                st.info(f"😐 Neutral — confidence: {confidence}")
                 st.markdown("- Try a small uplifting activity: listen to music, stretch, hydrate")
 
     st.markdown("---")
