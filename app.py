@@ -7,6 +7,19 @@ import re
 # Assistive • Non-diagnostic • Designed for early support
 # =====================================================
 
+# ---------- Session-level anonymous analytics ----------
+
+if "analytics" not in st.session_state:
+    st.session_state.analytics = {
+        "total_interactions": 0,
+        "priority_support": 0,
+        "support_suggested": 0,
+        "self_care": 0,
+        "insufficient_context": 0,
+        "guidance_page_visits": 0,
+        "wellbeing_page_visits": 0,
+    }
+
 # ---------- Signal keywords (non-clinical, judge-safe) ----------
 
 POSITIVE_WORDS = {
@@ -22,8 +35,7 @@ HIGH_CONCERN_WORDS = {
     "hopeless", "burned out", "worthless", "panic", "can't cope"
 }
 
-
-# ---------- Core analysis logic ----------
+# ---------- Core logic ----------
 
 def has_meaningful_text(text: str) -> bool:
     return bool(re.search(r"[a-zA-Z]{3,}", text))
@@ -77,13 +89,9 @@ def guidance_message(level: str) -> str:
         "Simple self-care steps and regular self-reflection may help."
     )
 
-
 # ---------- Page configuration ----------
 
-st.set_page_config(
-    page_title="HealthNav AI",
-    layout="wide"
-)
+st.set_page_config(page_title="HealthNav AI", layout="wide")
 
 # ---------- Styling ----------
 
@@ -120,15 +128,7 @@ with st.sidebar:
 
     page = st.radio(
         "",
-        ["Guidance Check", "Well-Being Check"]
-    )
-
-    st.markdown("---")
-    st.caption("System Mode")
-    st.radio(
-        "",
-        ["Standard guidance", "Enhanced analysis (if available)"],
-        disabled=True
+        ["Guidance Check", "Well-Being Check", "System Overview"]
     )
 
     st.markdown("---")
@@ -172,6 +172,8 @@ with st.expander("ℹ️ How this system works"):
 
 if page == "Guidance Check":
 
+    st.session_state.analytics["guidance_page_visits"] += 1
+
     st.markdown("<div class='container card'>", unsafe_allow_html=True)
 
     st.subheader("Early Guidance Check")
@@ -189,13 +191,22 @@ if page == "Guidance Check":
         level = analyze_input(user_input.strip())
         message = guidance_message(level)
 
+        st.session_state.analytics["total_interactions"] += 1
+
         if level == "PRIORITY_SUPPORT":
+            st.session_state.analytics["priority_support"] += 1
             st.warning(message)
+
         elif level == "SUPPORT_SUGGESTED":
+            st.session_state.analytics["support_suggested"] += 1
             st.info(message)
+
         elif level == "INSUFFICIENT_CONTEXT":
+            st.session_state.analytics["insufficient_context"] += 1
             st.info(message)
+
         else:
+            st.session_state.analytics["self_care"] += 1
             st.success(message)
 
     st.markdown("</div>", unsafe_allow_html=True)
@@ -206,25 +217,16 @@ if page == "Guidance Check":
 
 elif page == "Well-Being Check":
 
+    st.session_state.analytics["wellbeing_page_visits"] += 1
+
     st.markdown("<div class='container card'>", unsafe_allow_html=True)
 
     st.subheader("Quick Well-Being Check")
     st.write("A brief self-reflection exercise (not a medical assessment).")
 
-    mood = st.radio(
-        "How is your mood today?",
-        ["Good", "Okay", "Low"]
-    )
-
-    stress = st.radio(
-        "How stressed do you feel?",
-        ["Relaxed", "Somewhat stressed", "Very stressed"]
-    )
-
-    sleep = st.radio(
-        "How has your sleep been?",
-        ["Good", "Average", "Poor"]
-    )
+    mood = st.radio("How is your mood today?", ["Good", "Okay", "Low"])
+    stress = st.radio("How stressed do you feel?", ["Relaxed", "Somewhat stressed", "Very stressed"])
+    sleep = st.radio("How has your sleep been?", ["Good", "Average", "Poor"])
 
     if st.button("View Reflection"):
         if mood == "Low" or stress == "Very stressed" or sleep == "Poor":
@@ -237,6 +239,47 @@ elif page == "Well-Being Check":
                 "Your responses suggest things are generally balanced. "
                 "Maintaining healthy routines is encouraged."
             )
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+# =====================================================
+# PAGE: SYSTEM OVERVIEW (ANONYMOUS, AGGREGATE)
+# =====================================================
+
+elif page == "System Overview":
+
+    st.markdown("<div class='container card'>", unsafe_allow_html=True)
+
+    st.subheader("System Usage Overview")
+    st.write(
+        "This page presents a high-level, anonymous summary of system usage. "
+        "All data shown is aggregated and non-clinical."
+    )
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.metric("Total Guidance Interactions", st.session_state.analytics["total_interactions"])
+        st.metric("Guidance Page Visits", st.session_state.analytics["guidance_page_visits"])
+
+    with col2:
+        st.metric("Well-Being Check Visits", st.session_state.analytics["wellbeing_page_visits"])
+
+    st.markdown("---")
+    st.caption("Guidance Distribution (non-diagnostic)")
+
+    data = {
+        "Self-care guidance": st.session_state.analytics["self_care"],
+        "Support suggested": st.session_state.analytics["support_suggested"],
+        "Priority support advised": st.session_state.analytics["priority_support"],
+        "Insufficient context": st.session_state.analytics["insufficient_context"],
+    }
+
+    st.bar_chart(data)
+
+    st.caption(
+        "These insights are intended solely for system monitoring and improvement."
+    )
 
     st.markdown("</div>", unsafe_allow_html=True)
 
