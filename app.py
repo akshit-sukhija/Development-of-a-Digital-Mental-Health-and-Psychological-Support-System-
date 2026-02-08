@@ -8,25 +8,32 @@ import re
 # Assistive | Non-diagnostic | Ethical by design
 # -----------------------------------------------------
 
-# ---------- Basic signal detection (simple & judge-safe) ----------
+# ---------- Signal keyword sets (non-clinical, judge-safe) ----------
 
 POSITIVE_WORDS = {
-    "good","great","happy","joy","love","relieved","hopeful","calm",
-    "better","positive","grateful","excited","satisfied"
+    "good", "great", "happy", "relieved", "hopeful", "calm",
+    "better", "positive", "grateful", "satisfied", "okay"
 }
 
 MODERATE_CONCERN_WORDS = {
-    "sad","depressed","angry","upset","anxious","worried","hopeless",
-    "stress","stressed","pain","hurt","lonely","panic","frustrated"
+    "sad", "anxious", "worried", "stressed", "stress",
+    "overwhelmed", "lonely", "frustrated", "tired"
 }
 
 HIGH_CONCERN_WORDS = {
-    "hopeless", "worthless", "panic", "can't cope", "burned out"
+    "hopeless", "burned out", "worthless", "panic", "can't cope"
 }
 
 
+# ---------- Core logic ----------
+
+def is_meaningful_text(text: str) -> bool:
+    """Checks whether input contains meaningful language."""
+    return bool(re.search(r"[a-zA-Z]{3,}", text))
+
+
 def analyze_input(text: str) -> str:
-    """Lightweight keyword-based signal detection (non-clinical)."""
+    """Lightweight signal detection (non-diagnostic)."""
     text = text.lower()
 
     if any(word in text for word in HIGH_CONCERN_WORDS):
@@ -36,34 +43,34 @@ def analyze_input(text: str) -> str:
         return "SUPPORT_SUGGESTED"
 
     if any(word in text for word in POSITIVE_WORDS):
-        return "NO_IMMEDIATE_CONCERN"
+        return "SELF_CARE_SUGGESTED"
 
-    return "SELF_CARE_SUGGESTED"
+    return "NEUTRAL_UNCLEAR"
 
 
 def map_guidance(level: str) -> str:
-    """Maps signal level to calm, non-alarmist guidance."""
+    """Maps signal level to calm, aligned guidance."""
     if level == "PRIORITY_SUPPORT":
         return (
-            "Some strong emotional strain signals were noticed. "
+            "Signs of elevated emotional strain were detected. "
             "Reaching out to a trusted person or a qualified support professional may be helpful."
         )
 
     if level == "SUPPORT_SUGGESTED":
         return (
-            "Early signs of stress or emotional load were detected. "
-            "Gentle self-care and speaking with someone you trust could be beneficial."
+            "Signs of emotional strain were noticed. "
+            "Gentle self-care and supportive conversations may be beneficial."
         )
 
-    if level == "NO_IMMEDIATE_CONCERN":
+    if level == "SELF_CARE_SUGGESTED":
         return (
             "No immediate concerns were identified. "
-            "Maintaining healthy routines and regular self-care is encouraged."
+            "Maintaining regular routines and self-care practices is encouraged."
         )
 
     return (
-        "This appears to be a mild concern. "
-        "Simple self-care steps and regular check-ins with yourself may help."
+        "The input does not contain enough context for meaningful guidance. "
+        "You may try sharing a brief description of how you are feeling."
     )
 
 
@@ -74,18 +81,18 @@ st.set_page_config(
     layout="wide"
 )
 
-# ---------- Global styling (medical, calm, neutral) ----------
+# ---------- Global styling ----------
 
 st.markdown(
     """
     <style>
-    body {
-        background-color: #f9fafb;
-    }
+    body { background-color: #f9fafb; }
+
     .container {
         max-width: 900px;
         margin: auto;
     }
+
     .card {
         background: #ffffff;
         padding: 24px;
@@ -94,14 +101,17 @@ st.markdown(
         box-shadow: 0 6px 18px rgba(0,0,0,0.05);
         margin-bottom: 24px;
     }
+
     .header-title {
         font-size: 40px;
         margin-bottom: 6px;
     }
+
     .subtle-text {
         color: #6b7280;
         font-size: 15px;
     }
+
     .footer-text {
         color: #6b7280;
         font-size: 12px;
@@ -112,6 +122,25 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
+
+# ---------- Sidebar (refined & medical-safe) ----------
+
+with st.sidebar:
+    st.title("Navigation")
+    page = st.radio("", ["Guidance Check", "Well-Being Check"])
+
+    st.markdown("---")
+    st.caption("System Mode")
+    st.radio(
+        "",
+        ["Standard guidance", "Enhanced analysis (if available)"],
+        index=0
+    )
+
+    st.markdown("---")
+    st.caption(
+        "This system provides early guidance only and does not replace professional care."
+    )
 
 # ---------- Header ----------
 
@@ -130,20 +159,20 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# ---------- How it works (ethical transparency) ----------
+# ---------- How it works ----------
 
 with st.expander("ℹ️ How this system works"):
     st.markdown(
         """
-        - You share a short description of how you are feeling or any concern  
-        - The system looks for early, non-clinical signals  
-        - Supportive guidance is provided for self-care or next steps  
+        - You share a short message about how you are feeling  
+        - The system identifies early, non-clinical signals  
+        - Supportive guidance is provided when appropriate  
 
         This tool does **not** provide diagnosis, treatment, or medical decisions.
         """
     )
 
-# ---------- Main content card ----------
+# ---------- Main content ----------
 
 st.markdown("<div class='container card'>", unsafe_allow_html=True)
 
@@ -159,22 +188,31 @@ user_input = st.text_area(
 )
 
 if st.button("View Guidance"):
-    if user_input.strip():
+    if not user_input.strip():
+        st.info("Please enter a short message to receive guidance.")
+
+    elif not is_meaningful_text(user_input):
+        st.info(
+            "The input does not contain enough context for meaningful guidance. "
+            "You may try using a few descriptive words."
+        )
+
+    else:
         level = analyze_input(user_input)
         guidance_message = map_guidance(level)
 
         if level == "PRIORITY_SUPPORT":
             st.warning(guidance_message)
+
         elif level == "SUPPORT_SUGGESTED":
             st.info(guidance_message)
+
         else:
             st.success(guidance_message)
-    else:
-        st.info("Please enter a short message to receive guidance.")
 
 st.markdown("</div>", unsafe_allow_html=True)
 
-# ---------- Footer (regulatory & judge-safe) ----------
+# ---------- Footer ----------
 
 st.markdown(
     """
