@@ -1,0 +1,14 @@
+{
+  "headache": {
+    "guidance": "Mild headaches can be caused by stress, dehydration, or fatigue. Rest and hydration may help.",
+    "escalation": "If headache persists, worsens, or is accompanied by other symptoms, consider consulting a medical professional."
+  },
+  "fever": {
+    "guidance": "A mild fever can occur due to infections or fatigue. Monitoring and rest may help.",
+    "escalation": "If fever is high or lasts multiple days, seek medical guidance."
+  },
+  "stomach pain": {
+    "guidance": "Stomach discomfort can be related to diet, stress, or indigestion.",
+    "escalation": "Persistent or severe pain should be evaluated by a healthcare professional."
+  }
+}
