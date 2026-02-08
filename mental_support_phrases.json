@@ -1,0 +1,14 @@
+{
+  "low_support": [
+    "It’s okay to feel this way sometimes. Taking small breaks can help.",
+    "You’re not alone. Gentle self-care can make a difference."
+  ],
+  "medium_support": [
+    "It sounds like you’re going through a tough time. Reaching out for support could be helpful.",
+    "Your feelings are valid. Talking to someone you trust may help."
+  ],
+  "high_support": [
+    "You deserve support during this time. Please consider reaching out to a trusted person or professional help.",
+    "If you feel overwhelmed, connecting with a support service can be an important step."
+  ]
+}
