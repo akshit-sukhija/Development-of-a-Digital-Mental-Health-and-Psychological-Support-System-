@@ -137,6 +137,4 @@ It does **not** replace professional medical or mental health care.
 
 ```
 
----
-
 
