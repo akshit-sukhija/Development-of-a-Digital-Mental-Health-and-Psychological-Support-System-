@@ -1,33 +1,39 @@
 import streamlit as st
+import re
 
 # =====================================================
 # HealthNav AI
 # Early Health & Mental Wellness Guidance Platform
-# Assistive | Non-diagnostic | Ethical by design
+# Assistive • Non-diagnostic • Designed for early support
 # =====================================================
 
-# ---------- Basic signal detection (simple & judge-safe) ----------
+# ---------- Signal keywords (non-clinical, judge-safe) ----------
 
 POSITIVE_WORDS = {
-    "good", "great", "happy", "joy", "love", "relieved", "hopeful", "calm",
-    "better", "positive", "grateful", "excited", "satisfied"
+    "good", "okay", "fine", "better", "calm", "relieved", "happy"
 }
 
 MODERATE_CONCERN_WORDS = {
-    "sad", "depressed", "angry", "upset", "anxious", "worried",
-    "stress", "stressed", "lonely", "frustrated", "overwhelmed"
+    "stressed", "anxious", "worried", "tired", "overwhelmed",
+    "lonely", "sad", "frustrated"
 }
 
 HIGH_CONCERN_WORDS = {
-    "hopeless", "worthless", "burned out", "burnt out", "panic", "can't cope"
+    "hopeless", "burned out", "worthless", "panic", "can't cope"
 }
+
+
+# ---------- Core analysis logic ----------
+
+def has_meaningful_text(text: str) -> bool:
+    return bool(re.search(r"[a-zA-Z]{3,}", text))
 
 
 def analyze_input(text: str) -> str:
     text = text.lower()
 
-    if not any(c.isalpha() for c in text):
-        return "NO_CONTEXT"
+    if not has_meaningful_text(text):
+        return "INSUFFICIENT_CONTEXT"
 
     if any(word in text for word in HIGH_CONCERN_WORDS):
         return "PRIORITY_SUPPORT"
@@ -41,7 +47,7 @@ def analyze_input(text: str) -> str:
     return "SELF_CARE_SUGGESTED"
 
 
-def map_guidance(level: str) -> str:
+def guidance_message(level: str) -> str:
     if level == "PRIORITY_SUPPORT":
         return (
             "Signs of elevated emotional strain were identified. "
@@ -50,8 +56,8 @@ def map_guidance(level: str) -> str:
 
     if level == "SUPPORT_SUGGESTED":
         return (
-            "Some indicators of emotional load were noticed. "
-            "Gentle self-care and seeking support from someone you trust could be beneficial."
+            "Early signs of emotional strain were noticed. "
+            "Gentle self-care and supportive conversations may be beneficial."
         )
 
     if level == "NO_IMMEDIATE_CONCERN":
@@ -60,7 +66,7 @@ def map_guidance(level: str) -> str:
             "Maintaining regular routines and self-care practices is encouraged."
         )
 
-    if level == "NO_CONTEXT":
+    if level == "INSUFFICIENT_CONTEXT":
         return (
             "The input does not contain enough context for meaningful guidance. "
             "Please share a short message describing how you are feeling."
@@ -79,7 +85,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# ---------- Global styling ----------
+# ---------- Styling ----------
 
 st.markdown(
     """
@@ -111,7 +117,11 @@ st.markdown(
 
 with st.sidebar:
     st.title("Navigation")
-    page = st.radio("", ["Guidance Check", "Well-Being Check"])
+
+    page = st.radio(
+        "",
+        ["Guidance Check", "Well-Being Check"]
+    )
 
     st.markdown("---")
     st.caption("System Mode")
@@ -148,17 +158,20 @@ st.markdown(
 with st.expander("ℹ️ How this system works"):
     st.markdown(
         """
-        - You share a short message about how you are feeling  
-        - The system identifies early, non-clinical signals  
-        - Supportive guidance is provided when appropriate  
+        • You share a short message about how you are feeling  
+        • The system identifies early, non-clinical signals  
+        • Supportive guidance is provided when appropriate  
 
-        This tool does **not** provide diagnosis, treatment, or medical decisions.
+        This tool does not provide diagnosis, treatment, or medical decisions.
         """
     )
 
-# ---------- Page: Guidance Check ----------
+# =====================================================
+# PAGE: GUIDANCE CHECK
+# =====================================================
 
-def render_guidance_check():
+if page == "Guidance Check":
+
     st.markdown("<div class='container card'>", unsafe_allow_html=True)
 
     st.subheader("Early Guidance Check")
@@ -173,50 +186,59 @@ def render_guidance_check():
     )
 
     if st.button("View Guidance"):
-        if user_input.strip():
-            level = analyze_input(user_input)
-            guidance_message = map_guidance(level)
+        level = analyze_input(user_input.strip())
+        message = guidance_message(level)
 
-            if level == "PRIORITY_SUPPORT":
-                st.warning(guidance_message)
-            elif level == "SUPPORT_SUGGESTED":
-                st.info(guidance_message)
-            elif level == "NO_CONTEXT":
-                st.info(guidance_message)
-            else:
-                st.success(guidance_message)
+        if level == "PRIORITY_SUPPORT":
+            st.warning(message)
+        elif level == "SUPPORT_SUGGESTED":
+            st.info(message)
+        elif level == "INSUFFICIENT_CONTEXT":
+            st.info(message)
         else:
-            st.info("Please enter a short message to receive guidance.")
+            st.success(message)
 
     st.markdown("</div>", unsafe_allow_html=True)
 
+# =====================================================
+# PAGE: WELL-BEING CHECK
+# =====================================================
 
-# ---------- Page: Well-Being Check ----------
+elif page == "Well-Being Check":
 
-def render_wellbeing_check():
     st.markdown("<div class='container card'>", unsafe_allow_html=True)
 
-    st.subheader("Well-Being Check")
-    st.write("A short self-reflection check-in. This is not a medical assessment.")
+    st.subheader("Quick Well-Being Check")
+    st.write("A brief self-reflection exercise (not a medical assessment).")
 
-    mood = st.radio("How is your mood today?", ["Good", "Okay", "Low"])
-    stress = st.radio("How stressed do you feel?", ["Relaxed", "Somewhat stressed", "Very stressed"])
-    sleep = st.radio("How has your sleep been?", ["Good", "Average", "Poor"])
+    mood = st.radio(
+        "How is your mood today?",
+        ["Good", "Okay", "Low"]
+    )
 
-    if st.button("View Summary"):
-        st.info(
-            "Thank you for checking in. Regular self-reflection can support ongoing well-being awareness."
-        )
+    stress = st.radio(
+        "How stressed do you feel?",
+        ["Relaxed", "Somewhat stressed", "Very stressed"]
+    )
+
+    sleep = st.radio(
+        "How has your sleep been?",
+        ["Good", "Average", "Poor"]
+    )
+
+    if st.button("View Reflection"):
+        if mood == "Low" or stress == "Very stressed" or sleep == "Poor":
+            st.info(
+                "Some signs of strain are present. "
+                "Paying attention to rest, routine, and support may be helpful."
+            )
+        else:
+            st.success(
+                "Your responses suggest things are generally balanced. "
+                "Maintaining healthy routines is encouraged."
+            )
 
     st.markdown("</div>", unsafe_allow_html=True)
-
-
-# ---------- Navigation routing ----------
-
-if page == "Guidance Check":
-    render_guidance_check()
-elif page == "Well-Being Check":
-    render_wellbeing_check()
 
 # ---------- Footer ----------
 
