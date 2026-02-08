@@ -1,9 +1,9 @@
 # 🧭 HealthNav AI  
-### Early Health & Mental Wellness Guidance System
+### Early Health & Mental Wellness Guidance System (Non-Diagnostic)
 
 HealthNav AI is a **non-diagnostic, assistive wellness guidance system** designed to support individuals in reflecting on **early mental wellness concerns** and **general well-being needs**.
 
-It provides **calm, supportive guidance and self-reflection prompts** to help users understand **when self-care may be sufficient** and **when additional support could be helpful** — without replacing medical or mental health professionals.
+The platform provides **calm, supportive guidance and self-reflection prompts** to help users understand **when self-care may be sufficient** and **when additional support could be helpful** — without replacing medical or mental health professionals.
 
 > ⚠️ **Important Notice**  
 > HealthNav AI is **not a medical device**.  
@@ -42,18 +42,19 @@ It is intentionally built to be:
 
 ---
 
-## 🧠 How It Works
+## 🧠 How the System Works
 
 1. The user enters a short message describing how they feel or a concern they wish to reflect on  
-2. The system performs **lightweight, rule-based signal detection** to identify early, non-clinical emotional patterns  
-3. Inputs are mapped to one of four **guidance categories**:
+2. The system primarily uses **lightweight, rule-based signal detection** to identify early, non-clinical emotional patterns  
+3. An **optional machine learning sentiment model** was developed and used during experimentation to validate signal consistency and compare outcomes  
+4. Inputs are mapped to one of four **guidance categories**:
    - Self-care suggested  
    - Support suggested  
    - Priority support advised  
    - Insufficient context  
-4. The user receives **clear, conservative guidance** aligned with ethical healthcare communication  
+5. The user receives **clear, conservative guidance** aligned with ethical healthcare communication  
 
-No medical decisions are made.
+The rule-based guidance engine remains the **authoritative decision layer** for user-facing outputs.
 
 ---
 
@@ -62,6 +63,7 @@ No medical decisions are made.
 - 🧭 Early emotional guidance (non-clinical)  
 - 🌱 Well-being self-reflection check  
 - 🧠 Transparent, rule-based logic  
+- 🧪 Experimental ML sentiment model for validation and comparison  
 - 📊 Anonymous, aggregate system usage overview  
 - 🔁 No dependency on external AI services  
 
@@ -83,7 +85,7 @@ No personal data, individual histories, or health profiles are collected or stor
 
 ---
 
-## 🛡️ Safety & Ethics
+## 🛡️ Safety & Ethical Design
 
 HealthNav AI is built with strict healthcare safety boundaries:
 
@@ -99,11 +101,12 @@ HealthNav AI is built with strict healthcare safety boundaries:
 
 ---
 
-## 🧰 Tech Stack
+## 🧰 Technology Stack
 
 - **Frontend:** Streamlit  
 - **Language:** Python  
-- **Logic:** Rule-based signal detection  
+- **Core Logic:** Rule-based signal detection  
+- **ML (Experimental):** Sentiment classification model (scikit-learn)  
 - **Design:** Minimal, medical-grade UI  
 - **Deployment:** Streamlit Cloud  
 
@@ -116,7 +119,7 @@ The system emphasizes **explainability and reliability**.
 ```bash
 pip install -r requirements.txt
 streamlit run app.py
-```
+````
 
 ---
 
@@ -136,5 +139,3 @@ HealthNav AI is an **assistive wellness guidance tool** only.
 It does **not** replace professional medical or mental health care.
 
 ```
-
-
